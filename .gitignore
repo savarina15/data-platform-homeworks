@@ -1,0 +1,14 @@
+# Секреты — НИКОГДА не коммитить
+inventory.ini
+team_internal
+*.key
+*.pem
+.env
+
+# Логи
+*.log
+
+# Системные
+.DS_Store
+__pycache__/
+*.pyc

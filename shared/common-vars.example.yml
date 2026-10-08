@@ -1,0 +1,25 @@
+---
+# === Hadoop ===
+hadoop_version: "3.4.0"
+hadoop_home: "/home/team/hadoop-3.4.0"
+
+# === Java ===
+java_home: "/usr/lib/jvm/java-8-openjdk-amd64"
+
+# === NameNode ===
+namenode_host: "team-37-nn"
+namenode_rpc_port: 9000
+namenode_http_port: 9870
+
+# === HDFS ===
+dfs_replication: 3
+
+# === YARN: ResourceManager ===
+resourcemanager_host: "team-37-nn"
+resourcemanager_webapp_port: 8088
+
+# === YARN: NodeManager ===
+nodemanager_webapp_port: 8042
+
+# === YARN: JobHistory ===
+jobhistory_webapp_port: 19888
