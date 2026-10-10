@@ -1,3 +1,4 @@
+
 ---
 - name: Установить Hadoop 3.4.0
   hosts: all
@@ -18,6 +19,7 @@
         remote_src: yes
         owner: team
         group: team
+        creates: "/home/team/hadoop-{{ hadoop_version }}/etc/hadoop/core-site.xml"
 
     - name: Прописать HADOOP_HOME
       copy:
