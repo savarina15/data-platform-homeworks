@@ -1,0 +1,27 @@
+---
+- name: Установить Hadoop 3.4.0
+  hosts: all
+  become: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  tasks:
+    - name: Скачать Hadoop
+      get_url:
+        url: "https://archive.apache.org/dist/hadoop/common/hadoop-{{ hadoop_version }}/hadoop-{{ hadoop_version }}.tar.gz"
+        dest: "/tmp/hadoop-{{ hadoop_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Распаковать Hadoop
+      unarchive:
+        src: "/tmp/hadoop-{{ hadoop_version }}.tar.gz"
+        dest: "/home/team/"
+        remote_src: yes
+        owner: team
+        group: team
+
+    - name: Прописать HADOOP_HOME
+      copy:
+        dest: /etc/profile.d/hadoop.sh
+        content: |
+          export HADOOP_HOME={{ hadoop_home }}
+          export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
