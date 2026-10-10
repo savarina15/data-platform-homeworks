@@ -4,7 +4,7 @@ hadoop_version: "3.4.0"
 hadoop_home: "/home/team/hadoop-3.4.0"
 
 # === Java ===
-java_home: "/usr/lib/jvm/java-8-openjdk-amd64"
+java_home: "/usr/lib/jvm/java-11-openjdk-amd64"
 
 # === NameNode ===
 namenode_host: "team-37-nn"

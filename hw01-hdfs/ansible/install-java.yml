@@ -1,0 +1,19 @@
+---
+- name: Установить Java 11
+  hosts: all
+  become: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  tasks:
+    - name: Установить openjdk-11-jdk-headless
+      apt:
+        name: openjdk-11-jdk-headless
+        state: present
+        update_cache: yes
+
+    - name: Прописать JAVA_HOME
+      copy:
+        dest: /etc/profile.d/java.sh
+        content: |
+          export JAVA_HOME={{ java_home }}
+          export PATH=$PATH:$JAVA_HOME/bin

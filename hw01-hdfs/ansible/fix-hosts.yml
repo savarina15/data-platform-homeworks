@@ -1,0 +1,10 @@
+---
+- name: Закомментировать 127.0.1.1 в /etc/hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Закомментировать 127.0.1.1
+      replace:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1(.*)$'
+        replace: '# 127.0.1.1\1'
