@@ -1,0 +1,7 @@
+---
+- import_playbook: fix-hosts.yml
+- import_playbook: install-java.yml
+- import_playbook: install-hadoop.yml
+- import_playbook: configure.yml
+- import_playbook: initialize.yml
+- import_playbook: start.yml

@@ -45,14 +45,24 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Создать базовый каталог HDFS на узлах с демонами
+    - name: Создать базовый каталог HDFS
       ansible.builtin.file:
         path: "{{ hdfs_base_dir }}"
         state: directory
         owner: "{{ hdfs_user }}"
         group: "{{ hdfs_group }}"
         mode: '0750'
-      when: inventory_hostname in (groups['namenode'] + groups['secondarynamenode'] + groups['datanodes'])
+
+    - name: Создать каталоги PID и логов Hadoop
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0750'
+      loop:
+        - "{{ hadoop_pid_dir }}"
+        - "{{ hadoop_log_dir }}"
 
     - name: Создать каталоги данных для ролей узла
       ansible.builtin.file:
@@ -75,6 +85,9 @@
         marker: "# {mark} ANSIBLE MANAGED JAVA_HOME"
         block: |
           export JAVA_HOME={{ java_home | quote }}
+          export HADOOP_LOG_DIR={{ hadoop_log_dir | quote }}
+          export HADOOP_PID_DIR={{ hadoop_pid_dir | quote }}
+          export HADOOP_IDENT_STRING={{ hdfs_user | quote }}
         owner: "{{ hdfs_user }}"
         group: "{{ hdfs_group }}"
         mode: '0644'
@@ -97,9 +110,6 @@
         argv:
           - "{{ hadoop_home }}/bin/hdfs"
           - version
-      environment:
-        JAVA_HOME: "{{ java_home }}"
-        HADOOP_HOME: "{{ hadoop_home }}"
-        HADOOP_CONF_DIR: "{{ hadoop_conf_dir }}"
+      environment: "{{ hadoop_environment }}"
       changed_when: false
       when: not ansible_check_mode

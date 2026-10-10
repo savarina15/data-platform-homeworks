@@ -20,6 +20,17 @@ hdfs_base_dir: "/home/team/hdfs"
 hdfs_namenode_dir: "{{ hdfs_base_dir }}/namenode"
 hdfs_datanode_dir: "{{ hdfs_base_dir }}/datanode"
 hdfs_checkpoint_dir: "{{ hdfs_base_dir }}/namesecondary"
+hadoop_log_dir: "{{ hdfs_base_dir }}/logs"
+hadoop_pid_dir: "{{ hdfs_base_dir }}/run"
+hdfs_ready_retries: 30
+hdfs_ready_delay: 3
+hadoop_environment:
+  JAVA_HOME: "{{ java_home }}"
+  HADOOP_HOME: "{{ hadoop_home }}"
+  HADOOP_CONF_DIR: "{{ hadoop_conf_dir }}"
+  HADOOP_LOG_DIR: "{{ hadoop_log_dir }}"
+  HADOOP_PID_DIR: "{{ hadoop_pid_dir }}"
+  HADOOP_IDENT_STRING: "{{ hdfs_user }}"
 secondarynamenode_host: "{{ groups['secondarynamenode'] | first }}"
 secondarynamenode_http_port: 9868
 

@@ -1,0 +1,88 @@
+---
+- import_playbook: initialize.yml
+  vars:
+    hdfs_allow_format: false
+
+- name: Запустить NameNode
+  hosts: namenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: namenode
+        hdfs_daemon_action: start
+    - name: Дождаться RPC NameNode
+      ansible.builtin.wait_for:
+        host: "{{ namenode_host }}"
+        port: "{{ namenode_rpc_port }}"
+        timeout: 90
+      when: not ansible_check_mode
+
+- name: Запустить DataNode
+  hosts: datanodes
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: datanode
+        hdfs_daemon_action: start
+
+- name: Запустить SecondaryNameNode
+  hosts: secondarynamenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: secondarynamenode
+        hdfs_daemon_action: start
+    - name: Дождаться HTTP SecondaryNameNode
+      ansible.builtin.wait_for:
+        host: "{{ secondarynamenode_host }}"
+        port: "{{ secondarynamenode_http_port }}"
+        timeout: 90
+      when: not ansible_check_mode
+
+- name: Проверить готовность HDFS
+  hosts: namenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - name: Дождаться регистрации ровно трёх Live DataNode
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfsadmin, -report]
+      register: hdfs_report
+      changed_when: false
+      until: >-
+        hdfs_report.rc == 0
+        and 'Live datanodes (3):' in hdfs_report.stdout
+        and not (hdfs_report.stdout is search('Dead datanodes \([1-9]'))
+      retries: "{{ hdfs_ready_retries }}"
+      delay: "{{ hdfs_ready_delay }}"
+      when: not ansible_check_mode
+    - name: Дождаться выхода NameNode из safe mode
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfsadmin, -safemode, get]
+      register: hdfs_safemode
+      changed_when: false
+      until: hdfs_safemode.rc == 0 and 'Safe mode is OFF' in hdfs_safemode.stdout
+      retries: "{{ hdfs_ready_retries }}"
+      delay: "{{ hdfs_ready_delay }}"
+      when: not ansible_check_mode
