@@ -9,6 +9,7 @@ java_home: "/usr/lib/jvm/java-11-openjdk-amd64"
 
 # === NameNode ===
 namenode_host: "{{ groups['namenode'] | first }}"
+namenode_bind_host: "0.0.0.0"
 namenode_rpc_port: 9000
 namenode_http_port: 9870
 

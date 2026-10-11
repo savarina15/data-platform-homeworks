@@ -22,8 +22,16 @@
     <value>{{ namenode_host | e }}:{{ namenode_rpc_port }}</value>
   </property>
   <property>
+    <name>dfs.namenode.rpc-bind-host</name>
+    <value>{{ namenode_bind_host | e }}</value>
+  </property>
+  <property>
     <name>dfs.namenode.http-address</name>
     <value>{{ namenode_host | e }}:{{ namenode_http_port }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-bind-host</name>
+    <value>{{ namenode_bind_host | e }}</value>
   </property>
   <property>
     <name>dfs.namenode.secondary.http-address</name>
