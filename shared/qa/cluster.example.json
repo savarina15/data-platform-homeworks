@@ -1,0 +1,18 @@
+{
+  "services": {
+    "namenode": {"url": "http://nn.example.internal:9870", "local_port": 19870},
+    "secondarynamenode": {"url": "http://nn.example.internal:9868", "local_port": 19868},
+    "datanode-nn": {"url": "http://nn.example.internal:9864", "local_port": 19864},
+    "datanode-00": {"url": "http://worker00.example.internal:9864", "local_port": 29864},
+    "datanode-01": {"url": "http://worker01.example.internal:9864", "local_port": 39864},
+    "resourcemanager": {"url": "http://nn.example.internal:8088", "local_port": 18088},
+    "nodemanager-nn": {"url": "http://nn.example.internal:8042", "local_port": 18042},
+    "nodemanager-00": {"url": "http://worker00.example.internal:8042", "local_port": 28042},
+    "nodemanager-01": {"url": "http://worker01.example.internal:8042", "local_port": 38042},
+    "jobhistory": {"url": "http://nn.example.internal:19888", "local_port": 29888}
+  },
+  "datanodes": ["datanode-nn", "datanode-00", "datanode-01"],
+  "nodemanagers": ["nodemanager-nn", "nodemanager-00", "nodemanager-01"],
+  "jobhistory_required": true,
+  "checkpoint_max_age_seconds": 7200
+}

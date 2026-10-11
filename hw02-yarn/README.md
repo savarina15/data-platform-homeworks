@@ -4,10 +4,11 @@
 - ResourceManager
 - NodeManager
 - JobHistory Server
-- Web UI доступны извне
+- Web UI доступны через localhost (SSH-туннели; согласно уточнению преподавателя)
 
 ## Установка
 (будет заполнено)
 
 ## Проверка
-(будет заполнено)
+
+QA / Network: [проверки YARN и доступ к Web UI через SSH](QA-NETWORK.md).
