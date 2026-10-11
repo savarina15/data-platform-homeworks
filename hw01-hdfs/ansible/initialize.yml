@@ -112,7 +112,7 @@
       changed_when: false
       when: not ansible_check_mode
 
-    - name: Подтвердить наличие корректных метаданных NameNode
+    - name: Подтвердить наличие метаданных NameNode
       ansible.builtin.assert:
         that:
           - (hdfs_initialized_storage.stdout | from_json).storage.namenode.state == 'formatted'

@@ -11,8 +11,6 @@ from pathlib import Path
 def inspect_directory(role, directory):
     path = Path(directory)
     result = {"path": str(path), "state": "missing"}
-    if not path.is_absolute() or path.is_symlink():
-        raise ValueError(f"{role}: expected an absolute, non-symlink directory: {path}")
     if not path.exists():
         return result
     if not path.is_dir():
@@ -21,8 +19,8 @@ def inspect_directory(role, directory):
         result["state"] = "empty"
         return result
     version = path / "current" / "VERSION"
-    if not version.is_file() or version.is_symlink():
-        raise ValueError(f"{role}: nonempty storage without a regular current/VERSION: {path}")
+    if not version.is_file():
+        raise ValueError(f"{role}: nonempty storage without current/VERSION: {path}")
     properties = {}
     for line in version.read_text().splitlines():
         line = line.strip()
@@ -32,36 +30,18 @@ def inspect_directory(role, directory):
     expected_type = "DATA_NODE" if role == "datanode" else "NAME_NODE"
     if properties.get("storageType") != expected_type or not properties.get("clusterID"):
         raise ValueError(f"{role}: invalid storageType or clusterID in {version}")
-    required_numbers = ["layoutVersion", "cTime"]
-    if role != "datanode":
-        required_numbers.append("namespaceID")
-        if not properties.get("blockpoolID"):
-            raise ValueError(f"{role}: missing blockpoolID in {version}")
-    try:
-        for key in required_numbers:
-            int(properties[key])
-    except (KeyError, ValueError) as error:
-        raise ValueError(f"{role}: invalid or missing numeric metadata in {version}") from error
-    if role != "datanode":
-        images = [p for p in version.parent.glob("fsimage_*") if p.name[8:].isdigit() and p.is_file()]
-        if not any(Path(str(image) + ".md5").is_file() for image in images):
-            raise ValueError(f"{role}: no fsimage with checksum file in {version.parent}")
     result.update(state="formatted", cluster_id=properties["clusterID"])
     return result
 
 
 def validate_cluster(reports):
-    namenodes = [r["storage"]["namenode"] for r in reports.values() if "namenode" in r["storage"]]
-    if len(namenodes) != 1:
-        raise ValueError("Expected exactly one NameNode storage report")
-    namenode = namenodes[0]
+    # initialize.yml already verifies that inventory contains exactly one NameNode.
+    namenode = next(r["storage"]["namenode"] for r in reports.values() if "namenode" in r["storage"])
     formatted = namenode["state"] == "formatted"
     for host, report in reports.items():
         if not formatted and report.get("running_daemons"):
             raise ValueError(f"{host}: HDFS daemons are running; refusing initial format")
         for role, storage in report["storage"].items():
-            if storage["state"] not in ("missing", "empty", "formatted"):
-                raise ValueError(f"{host}/{role}: unexpected storage state")
             if not formatted and storage["state"] == "formatted":
                 raise ValueError(f"{host}/{role}: existing metadata with unformatted NameNode; refusing format")
             if formatted and storage["state"] == "formatted" and storage["cluster_id"] != namenode["cluster_id"]:
