@@ -1,0 +1,3 @@
+{% for worker in groups['datanodes'] | unique | sort %}
+{{ worker }}
+{% endfor %}

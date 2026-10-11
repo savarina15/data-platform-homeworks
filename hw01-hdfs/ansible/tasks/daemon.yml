@@ -1,0 +1,31 @@
+---
+- name: "Проверить состояние {{ hdfs_daemon }}"
+  ansible.builtin.command:
+    argv: ["{{ hadoop_home }}/bin/hdfs", --daemon, status, "{{ hdfs_daemon }}"]
+  register: hdfs_daemon_before
+  changed_when: false
+  check_mode: no
+
+- name: "Запустить {{ hdfs_daemon }} независимо от завершения SSH-сеанса"
+  ansible.builtin.command:
+    argv: [nohup, "{{ hadoop_home }}/bin/hdfs", --daemon, start, "{{ hdfs_daemon }}"]
+  when: >-
+    hdfs_daemon_action == 'start' and 'is running as process' not in hdfs_daemon_before.stdout
+
+- name: "Остановить {{ hdfs_daemon }}"
+  ansible.builtin.command:
+    argv: ["{{ hadoop_home }}/bin/hdfs", --daemon, stop, "{{ hdfs_daemon }}"]
+  when: >-
+    hdfs_daemon_action == 'stop' and 'is running as process' in hdfs_daemon_before.stdout
+
+- name: "Дождаться состояния {{ hdfs_daemon }} после {{ hdfs_daemon_action }}"
+  ansible.builtin.command:
+    argv: ["{{ hadoop_home }}/bin/hdfs", --daemon, status, "{{ hdfs_daemon }}"]
+  register: hdfs_daemon_after
+  changed_when: false
+  until: >-
+    (hdfs_daemon_action == 'start' and 'is running as process' in hdfs_daemon_after.stdout)
+    or (hdfs_daemon_action == 'stop' and 'is stopped.' in hdfs_daemon_after.stdout)
+  retries: "{{ hdfs_ready_retries }}"
+  delay: "{{ hdfs_ready_delay }}"
+  when: not ansible_check_mode

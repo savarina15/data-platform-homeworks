@@ -1,0 +1,119 @@
+---
+- name: Проверить хранилища HDFS на всех узлах
+  hosts: all
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - name: Проверить состав кластера перед инициализацией
+      ansible.builtin.assert:
+        that:
+          - groups.get('namenode', []) | length == 1
+          - groups.get('secondarynamenode', []) | length == 1
+          - groups.get('datanodes', []) | unique | length == 3
+          - ansible_play_hosts_all | sort == groups['all'] | sort
+        fail_msg: "Инициализация требует полного inventory: 1 NameNode, 1 SecondaryNameNode, 3 DataNode; не используйте --limit."
+      run_once: yes
+
+    - name: Прочитать фактические пути хранения из конфигурации Hadoop
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", getconf, -confKey, "{{ item.key }}"]
+      loop:
+        - {key: dfs.namenode.name.dir, path: "{{ hdfs_namenode_dir }}", host_group: namenode}
+        - {key: dfs.datanode.data.dir, path: "{{ hdfs_datanode_dir }}", host_group: datanodes}
+        - {key: dfs.namenode.checkpoint.dir, path: "{{ hdfs_checkpoint_dir }}", host_group: secondarynamenode}
+      loop_control:
+        label: "{{ item.key }}"
+      when: inventory_hostname in groups[item.host_group]
+      register: hdfs_effective_paths
+      changed_when: false
+      check_mode: no
+
+    - name: Проверять только те каталоги, которые действительно использует Hadoop
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim == item.item.path
+        fail_msg: "Путь {{ item.item.key }} не совпадает с переменными. Сначала выполните configure.yml с теми же параметрами."
+      loop: "{{ hdfs_effective_paths.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+      when: not (item.skipped | default(false))
+
+    - name: Прочитать метаданные и список работающих демонов без изменений
+      ansible.builtin.script:
+        cmd: >-
+          ../scripts/inspect-storage.py
+          --jps {{ (java_home ~ '/bin/jps') | quote }}
+          {% if inventory_hostname in groups['namenode'] %}
+          --namenode-dir {{ hdfs_namenode_dir | quote }}
+          {% endif %}
+          {% if inventory_hostname in groups['datanodes'] %}
+          --datanode-dir {{ hdfs_datanode_dir | quote }}
+          {% endif %}
+          {% if inventory_hostname in groups['secondarynamenode'] %}
+          --checkpoint-dir {{ hdfs_checkpoint_dir | quote }}
+          {% endif %}
+        executable: python3
+      register: hdfs_storage_inspection
+      changed_when: false
+      check_mode: no
+
+    - name: Сохранить отчёт текущего узла для общей проверки
+      ansible.builtin.set_fact:
+        hdfs_storage_report: "{{ hdfs_storage_inspection.stdout | from_json }}"
+
+- name: Безопасно инициализировать новый NameNode
+  hosts: namenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - name: Проверить согласованность метаданных всего кластера
+      ansible.builtin.script:
+        cmd: >-
+          ../scripts/inspect-storage.py --validate-cluster
+          {{ dict(groups['all'] | zip(groups['all'] | map('extract', hostvars, 'hdfs_storage_report'))) | to_json | quote }}
+        executable: python3
+      register: hdfs_cluster_inspection
+      changed_when: false
+      check_mode: no
+
+    - name: Определить, существует ли кластер
+      ansible.builtin.set_fact:
+        hdfs_cluster_storage: "{{ hdfs_cluster_inspection.stdout | from_json }}"
+
+    - name: Не форматировать кластер при обычном запуске
+      ansible.builtin.assert:
+        that:
+          - hdfs_cluster_storage.formatted or (hdfs_allow_format | default(true) | bool)
+        fail_msg: "NameNode ещё не инициализирован. Выполните initialize.yml или deploy.yml."
+
+    - name: Форматировать только новый пустой NameNode
+      ansible.builtin.command:
+        argv:
+          - "{{ hadoop_home }}/bin/hdfs"
+          - namenode
+          - -format
+          - -nonInteractive
+        creates: "{{ hdfs_namenode_dir }}/current/VERSION"
+      when: not hdfs_cluster_storage.formatted
+
+    - name: Проверить результат инициализации NameNode
+      ansible.builtin.script:
+        cmd: "../scripts/inspect-storage.py --namenode-dir {{ hdfs_namenode_dir | quote }}"
+        executable: python3
+      register: hdfs_initialized_storage
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Подтвердить наличие метаданных NameNode
+      ansible.builtin.assert:
+        that:
+          - (hdfs_initialized_storage.stdout | from_json).storage.namenode.state == 'formatted'
+      when: not ansible_check_mode

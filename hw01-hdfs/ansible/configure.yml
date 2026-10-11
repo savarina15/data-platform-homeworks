@@ -1,0 +1,115 @@
+---
+- name: Настроить HDFS и окружение Hadoop
+  hosts: all
+  become: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  tasks:
+    - name: Проверить состав кластера
+      ansible.builtin.assert:
+        that:
+          - groups.get('namenode', []) | length == 1
+          - groups.get('secondarynamenode', []) | length == 1
+          - groups.get('datanodes', []) | unique | length == 3
+          - dfs_replication | int == 3
+        fail_msg: "Нужны 1 NameNode, 1 SecondaryNameNode и 3 разных DataNode; replication = 3."
+      run_once: yes
+
+    - name: Проверить пути хранения HDFS
+      ansible.builtin.assert:
+        that:
+          - hdfs_base_dir.startswith('/')
+          - hdfs_namenode_dir.startswith('/')
+          - hdfs_datanode_dir.startswith('/')
+          - hdfs_checkpoint_dir.startswith('/')
+          - '[hdfs_namenode_dir, hdfs_datanode_dir, hdfs_checkpoint_dir] | unique | length == 3'
+        fail_msg: "Для HDFS нужны разные абсолютные пути хранения метаданных, блоков и checkpoint."
+
+    - name: Проверить наличие установленного Hadoop и Java
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: yes
+      loop:
+        - "{{ hadoop_home }}/bin/hdfs"
+        - "{{ hadoop_conf_dir }}/hadoop-env.sh"
+        - "{{ java_home }}/bin/java"
+      register: hadoop_prerequisites
+
+    - name: Проверить результат установки A
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg | default(false)
+        fail_msg: "Не найден {{ item.item }}. Сначала выполните установку Java/Hadoop и проверьте пути."
+      loop: "{{ hadoop_prerequisites.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Создать базовый каталог HDFS
+      ansible.builtin.file:
+        path: "{{ hdfs_base_dir }}"
+        state: directory
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0750'
+
+    - name: Создать каталоги PID и логов Hadoop
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0750'
+      loop:
+        - "{{ hadoop_pid_dir }}"
+        - "{{ hadoop_log_dir }}"
+
+    - name: Создать каталоги данных для ролей узла
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0750'
+      loop:
+        - {path: "{{ hdfs_namenode_dir }}", host_group: namenode}
+        - {path: "{{ hdfs_datanode_dir }}", host_group: datanodes}
+        - {path: "{{ hdfs_checkpoint_dir }}", host_group: secondarynamenode}
+      loop_control:
+        label: "{{ item.path }}"
+      when: inventory_hostname in groups[item.host_group]
+
+    - name: Настроить JAVA_HOME в собственном окружении Hadoop
+      ansible.builtin.blockinfile:
+        path: "{{ hadoop_conf_dir }}/hadoop-env.sh"
+        marker: "# {mark} ANSIBLE MANAGED JAVA_HOME"
+        block: |
+          export JAVA_HOME={{ java_home | quote }}
+          export HADOOP_LOG_DIR={{ hadoop_log_dir | quote }}
+          export HADOOP_PID_DIR={{ hadoop_pid_dir | quote }}
+          export HADOOP_IDENT_STRING={{ hdfs_user | quote }}
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0644'
+
+    - name: Развернуть конфигурацию HDFS и клиентские настройки
+      ansible.builtin.template:
+        src: "../templates/{{ item }}.j2"
+        dest: "{{ hadoop_conf_dir }}/{{ item }}"
+        owner: "{{ hdfs_user }}"
+        group: "{{ hdfs_group }}"
+        mode: '0644'
+      loop:
+        - core-site.xml
+        - hdfs-site.xml
+        - workers
+
+    - name: Проверить автоматический запуск Hadoop с явным окружением
+      become_user: "{{ hdfs_user }}"
+      ansible.builtin.command:
+        argv:
+          - "{{ hadoop_home }}/bin/hdfs"
+          - version
+      environment: "{{ hadoop_environment }}"
+      changed_when: false
+      when: not ansible_check_mode
