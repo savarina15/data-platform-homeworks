@@ -1,0 +1,85 @@
+---
+- name: Configure dedicated YARN files
+  when: rezhim in ['configure', 'deploy']
+  block:
+    - name: Inspect the dedicated HDFS client copies
+      ansible.builtin.stat:
+        path: "{{ yarn_conf }}/{{ item }}"
+      loop: [core-site.xml, hdfs-site.xml, log4j.properties]
+      register: copied_clients
+    - name: Require YARN stopped before refreshing HDFS client copies
+      ansible.builtin.assert:
+        that: >-
+          not (java_processes.stdout is search('(?:ResourceManager|NodeManager|JobHistoryServer)'))
+          or item.0.stat.checksum | default('missing') == item.1.stat.checksum | default('')
+        fail_msg: "HDFS settings changed. Stop only YARN before refreshing its configuration."
+      loop: "{{ original_clients.results | zip(copied_clients.results) | list }}"
+      loop_control: {label: "{{ item.0.item }}"}
+    - name: Inspect dedicated settings before changes
+      ansible.builtin.stat:
+        path: "{{ yarn_conf }}/{{ item.output }}"
+      loop: "{{ yarn_files }}"
+      register: current_files
+    - name: Refuse configuration changes while YARN is running
+      ansible.builtin.assert:
+        that: >-
+          not (java_processes.stdout is search('(?:ResourceManager|NodeManager|JobHistoryServer)'))
+          or item.stat.checksum | default('') == lookup('template', playbook_dir ~ '/../config/templates/' ~ item.item.template) | hash('sha1')
+        fail_msg: "Stop only YARN before changing its settings."
+      loop: "{{ current_files.results }}"
+      loop_control: {label: "{{ item.item.output }}"}
+    - name: Create separate YARN directories
+      ansible.builtin.file:
+        path: "{{ yarn_base }}/{{ item }}"
+        state: directory
+        mode: '0750'
+      loop: [conf, logs, run, local, container-logs]
+    - name: Copy HDFS client settings without editing the originals
+      ansible.builtin.copy:
+        src: "{{ hadoop_conf_dir }}/{{ item }}"
+        dest: "{{ yarn_conf }}/{{ item }}"
+        remote_src: true
+        mode: '0644'
+        backup: true
+      loop: [core-site.xml, hdfs-site.xml, log4j.properties]
+      when: not ansible_check_mode or dedicated_env.stat.exists
+    - name: Render dedicated configuration with backups
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../config/templates/{{ item.template }}"
+        dest: "{{ yarn_conf }}/{{ item.output }}"
+        mode: '0644'
+        backup: true
+      loop: "{{ yarn_files }}"
+      when: not ansible_check_mode or dedicated_env.stat.exists
+- name: Prepare YARN-owned HDFS directories
+  when: inventory_hostname in groups['namenode'] and rezhim in ['configure', 'deploy'] and not ansible_check_mode
+  block:
+    - name: Require HDFS outside safe mode
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfsadmin, -safemode, get]
+      register: safe_mode
+      changed_when: false
+      failed_when: safe_mode.rc != 0 or 'Safe mode is OFF' not in safe_mode.stdout
+    - name: Inspect dedicated history and log directories
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfs, -test, -d, "{{ item.path }}"]
+      loop:
+        - {path: "{{ yarn_history }}/done", mode: '750'}
+        - {path: "{{ yarn_history }}/intermediate", mode: '1777'}
+        - {path: "{{ yarn_remote_logs }}", mode: '1777'}
+        - {path: "{{ yarn_staging }}", mode: '1777'}
+      register: hdfs_dirs
+      changed_when: false
+      failed_when: hdfs_dirs.rc not in [0, 1]
+    - name: Create only missing HDFS directories
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfs, -mkdir, -p, "{{ item.item.path }}"]
+      loop: "{{ hdfs_dirs.results }}"
+      when: item.rc == 1
+      loop_control: {label: "{{ item.item.path }}"}
+    - name: Set permissions only on newly created directories
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", dfs, -chmod, "{{ item.item.mode }}", "{{ item.item.path }}"]
+      loop: "{{ hdfs_dirs.results }}"
+      when: item.rc == 1
+      loop_control: {label: "{{ item.item.path }}"}

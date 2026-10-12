@@ -1,0 +1,30 @@
+---
+- name: Inspect dedicated daemon PID
+  ansible.builtin.command:
+    argv: ["{{ hadoop_home }}/bin/{{ daemon.tool }}", --config, "{{ yarn_conf }}", --daemon, status, "{{ daemon.name }}"]
+  register: do_zapuska
+  changed_when: false
+  failed_when: false
+  check_mode: false
+- name: Refuse to manage another deployment's daemon
+  ansible.builtin.assert:
+    that: daemon.java_class not in java_processes.stdout or 'is running as process' in do_zapuska.stdout
+- name: Change daemon state only when necessary
+  ansible.builtin.command:
+    argv: [nohup, "{{ hadoop_home }}/bin/{{ daemon.tool }}", --config, "{{ yarn_conf }}", --daemon, "{{ 'stop' if rezhim == 'stop' else 'start' }}", "{{ daemon.name }}"]
+  when: (rezhim == 'stop' and 'is running as process' in do_zapuska.stdout) or (rezhim != 'stop' and 'is running as process' not in do_zapuska.stdout)
+- name: Wait for Java process state
+  ansible.builtin.command:
+    argv: ["{{ java_home }}/bin/jps", -l]
+  register: posle_zapuska
+  changed_when: false
+  until: (rezhim == 'stop' and daemon.java_class not in posle_zapuska.stdout) or (rezhim != 'stop' and daemon.java_class in posle_zapuska.stdout)
+  retries: 20
+  delay: 3
+  when: not ansible_check_mode
+- name: Wait for ResourceManager RPC before starting workers
+  ansible.builtin.wait_for:
+    host: "{{ groups['namenode'][0] }}"
+    port: 8032
+    timeout: 90
+  when: daemon.name == 'resourcemanager' and rezhim != 'stop' and not ansible_check_mode

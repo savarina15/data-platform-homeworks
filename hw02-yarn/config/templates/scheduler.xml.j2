@@ -1,0 +1,12 @@
+{% set properties = {
+  'yarn.scheduler.capacity.root.queues': 'default',
+  'yarn.scheduler.capacity.root.default.capacity': 100,
+  'yarn.scheduler.capacity.root.default.maximum-capacity': 100,
+  'yarn.scheduler.capacity.maximum-am-resource-percent': 0.5
+} %}
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+{% for name, value in properties.items() %}
+  <property><name>{{ name }}</name><value>{{ value | e }}</value></property>
+{% endfor %}
+</configuration>

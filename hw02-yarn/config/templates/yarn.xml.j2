@@ -1,0 +1,27 @@
+{% set properties = {
+  'yarn.resourcemanager.hostname': groups['namenode'][0],
+  'yarn.resourcemanager.bind-host': '0.0.0.0',
+  'yarn.resourcemanager.webapp.address': groups['namenode'][0] ~ ':' ~ resourcemanager_webapp_port,
+  'yarn.nodemanager.hostname': inventory_hostname,
+  'yarn.nodemanager.bind-host': '0.0.0.0',
+  'yarn.nodemanager.webapp.address': inventory_hostname ~ ':' ~ nodemanager_webapp_port,
+  'yarn.nodemanager.aux-services': 'mapreduce_shuffle',
+  'yarn.nodemanager.env-whitelist': 'JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,CLASSPATH_PREPEND_DISTCACHE,HADOOP_YARN_HOME,HADOOP_HOME,PATH,LANG,TZ,HADOOP_MAPRED_HOME',
+  'yarn.nodemanager.resource.memory-mb': pamyat_konteinera_mb,
+  'yarn.nodemanager.resource.cpu-vcores': yarn_vcores,
+  'yarn.scheduler.minimum-allocation-mb': 256,
+  'yarn.scheduler.maximum-allocation-mb': [yarn_master_cap_mb, yarn_worker_cap_mb] | max,
+  'yarn.scheduler.maximum-allocation-vcores': 2,
+  'yarn.nodemanager.vmem-check-enabled': 'false',
+  'yarn.nodemanager.pmem-check-enabled': 'true',
+  'yarn.nodemanager.local-dirs': yarn_base ~ '/local',
+  'yarn.nodemanager.log-dirs': yarn_base ~ '/container-logs',
+  'yarn.log-aggregation-enable': 'true',
+  'yarn.nodemanager.remote-app-log-dir': yarn_remote_logs
+} %}
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+{% for name, value in properties.items() %}
+  <property><name>{{ name }}</name><value>{{ value | e }}</value></property>
+{% endfor %}
+</configuration>
