@@ -1,0 +1,26 @@
+{% set properties = {
+  'mapreduce.framework.name': 'yarn',
+  'mapreduce.application.classpath': hadoop_home ~ '/share/hadoop/mapreduce/*:' ~ hadoop_home ~ '/share/hadoop/mapreduce/lib/*',
+  'yarn.app.mapreduce.am.env': 'HADOOP_MAPRED_HOME=' ~ hadoop_home,
+  'mapreduce.map.env': 'HADOOP_MAPRED_HOME=' ~ hadoop_home,
+  'mapreduce.reduce.env': 'HADOOP_MAPRED_HOME=' ~ hadoop_home,
+  'yarn.app.mapreduce.am.resource.mb': 512,
+  'yarn.app.mapreduce.am.command-opts': '-Xmx256m',
+  'mapreduce.map.memory.mb': 256,
+  'mapreduce.reduce.memory.mb': 256,
+  'mapreduce.map.java.opts': '-Xmx128m',
+  'mapreduce.reduce.java.opts': '-Xmx128m',
+  'mapreduce.task.io.sort.mb': 32,
+  'yarn.app.mapreduce.am.staging-dir': yarn_staging,
+  'mapreduce.jobhistory.address': groups['namenode'][0] ~ ':10020',
+  'mapreduce.jobhistory.bind-host': '0.0.0.0',
+  'mapreduce.jobhistory.webapp.address': groups['namenode'][0] ~ ':' ~ jobhistory_webapp_port,
+  'mapreduce.jobhistory.done-dir': yarn_history ~ '/done',
+  'mapreduce.jobhistory.intermediate-done-dir': yarn_history ~ '/intermediate'
+} %}
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+{% for name, value in properties.items() %}
+  <property><name>{{ name }}</name><value>{{ value | e }}</value></property>
+{% endfor %}
+</configuration>

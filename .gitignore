@@ -12,3 +12,5 @@ team_internal
 .DS_Store
 __pycache__/
 *.pyc
+*.idea
+*.docx

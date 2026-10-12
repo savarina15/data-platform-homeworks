@@ -1,0 +1,24 @@
+---
+# Plan tolko chitaet sostoyanie. Rezhimy: configure, start, stop, check, deploy.
+rezhim: plan
+yarn_base: "/home/{{ hdfs_user }}/yarn"
+yarn_conf: "{{ yarn_base }}/conf"
+yarn_heap_mb: 256
+# Rezerv pod OS, HDFS i sluzhebnye JVM; worker mozhet poluchit bolshe RAM.
+rezerv_master_mb: 2560
+rezerv_worker_mb: 2048
+yarn_master_cap_mb: 1024
+yarn_worker_cap_mb: 1536
+yarn_history: "/user/{{ hdfs_user }}/yarn/history"
+yarn_remote_logs: "/user/{{ hdfs_user }}/yarn/remote-logs"
+yarn_staging: "/user/{{ hdfs_user }}/yarn/staging"
+yarn_env:
+  JAVA_HOME: "{{ java_home }}"
+  HADOOP_HOME: "{{ hadoop_home }}"
+  HADOOP_CONF_DIR: "{{ yarn_conf }}"
+  HADOOP_LOG_DIR: "{{ yarn_base }}/logs"
+  HADOOP_PID_DIR: "{{ yarn_base }}/run"
+  HADOOP_IDENT_STRING: "{{ hdfs_user }}"
+  YARN_LOG_DIR: "{{ yarn_base }}/logs"
+  YARN_PID_DIR: "{{ yarn_base }}/run"
+  YARN_IDENT_STRING: "{{ hdfs_user }}"

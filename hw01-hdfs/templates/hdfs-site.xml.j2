@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Managed by Ansible. -->
+<configuration>
+  <property>
+    <name>dfs.replication</name>
+    <value>{{ dfs_replication }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>{{ hdfs_namenode_dir | e }}</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>{{ hdfs_datanode_dir | e }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.checkpoint.dir</name>
+    <value>{{ hdfs_checkpoint_dir | e }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>{{ namenode_host | e }}:{{ namenode_rpc_port }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.rpc-bind-host</name>
+    <value>{{ namenode_bind_host | e }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>{{ namenode_host | e }}:{{ namenode_http_port }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-bind-host</name>
+    <value>{{ namenode_bind_host | e }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.secondary.http-address</name>
+    <value>{{ secondarynamenode_host | e }}:{{ secondarynamenode_http_port }}</value>
+  </property>
+</configuration>

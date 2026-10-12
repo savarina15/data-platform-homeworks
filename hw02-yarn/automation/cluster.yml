@@ -1,0 +1,92 @@
+---
+- name: YARN with role-aware resource budgets and isolated configuration
+  hosts: all
+  become: true
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: true
+  vars_files:
+    - ../../shared/common-vars.example.yml
+    - ../config/nastroiki.example.yml
+  environment: "{{ yarn_env }}"
+  vars:
+    yarn_files:
+      - {output: hadoop-env.sh, template: environment.sh.j2}
+      - {output: yarn-site.xml, template: yarn.xml.j2}
+      - {output: mapred-site.xml, template: mapreduce.xml.j2}
+      - {output: capacity-scheduler.xml, template: scheduler.xml.j2}
+    spisok_demonov:
+      - {group: namenode, tool: yarn, name: resourcemanager, java_class: org.apache.hadoop.yarn.server.resourcemanager.ResourceManager}
+      - {group: datanodes, tool: yarn, name: nodemanager, java_class: org.apache.hadoop.yarn.server.nodemanager.NodeManager}
+      - {group: namenode, tool: mapred, name: historyserver, java_class: org.apache.hadoop.mapreduce.v2.hs.JobHistoryServer}
+  tasks:
+    - name: Validate action and dedicated paths
+      ansible.builtin.assert:
+        that:
+          - rezhim in ['plan', 'configure', 'start', 'stop', 'check', 'deploy']
+          - groups.get('namenode', []) | length == 1
+          - groups.get('datanodes', []) | unique | length == 3
+          - yarn_conf != hadoop_conf_dir
+          - yarn_base.startswith('/') and yarn_base != hdfs_base_dir
+          - not yarn_base.startswith(hdfs_base_dir + '/')
+          - yarn_heap_mb | int >= 256
+    - name: Calculate a stable RAM budget from total memory and host role
+      ansible.builtin.set_fact:
+        pamyat_konteinera_mb: "{{ [((ansible_memtotal_mb | int - (rezerv_master_mb if inventory_hostname in groups['namenode'] else rezerv_worker_mb) | int) // 256) * 256, (yarn_master_cap_mb if inventory_hostname in groups['namenode'] else yarn_worker_cap_mb) | int] | min }}"
+        yarn_vcores: "{{ [ansible_processor_vcpus | int, (1 if inventory_hostname in groups['namenode'] else 2)] | min }}"
+    - name: Require capacity for a small MapReduce application
+      ansible.builtin.assert:
+        that: pamyat_konteinera_mb | int >= 768 and yarn_vcores | int >= 1
+        fail_msg: "Insufficient RAM after reserve. Review the VM size and budgets."
+    - name: Show the deployment plan
+      ansible.builtin.debug:
+        msg: "action={{ rezhim }}; config={{ yarn_conf }}; container RAM={{ pamyat_konteinera_mb }} MiB; vcores={{ yarn_vcores }}; daemon heap={{ yarn_heap_mb }} MiB"
+    - name: Inspect Java processes
+      ansible.builtin.command:
+        argv: ["{{ java_home }}/bin/jps", -l]
+      register: java_processes
+      changed_when: false
+      check_mode: false
+    - name: Inspect dedicated environment
+      ansible.builtin.stat:
+        path: "{{ yarn_conf }}/hadoop-env.sh"
+      register: dedicated_env
+    - name: Require prior configure or no independently deployed YARN
+      ansible.builtin.assert:
+        that: dedicated_env.stat.exists or not (java_processes.stdout is search('(?:ResourceManager|NodeManager|JobHistoryServer)'))
+        fail_msg: "Existing YARN belongs to another deployment. Investigate its configuration."
+    - name: Inspect the original HDFS client files
+      ansible.builtin.stat:
+        path: "{{ hadoop_conf_dir }}/{{ item }}"
+      loop: [core-site.xml, hdfs-site.xml, log4j.properties]
+      register: original_clients
+    - name: Require installed HDFS client configuration
+      ansible.builtin.assert:
+        that: item.stat.isreg | default(false)
+        fail_msg: "Missing {{ item.item }}; verify the existing Hadoop installation."
+      loop: "{{ original_clients.results }}"
+      loop_control: {label: "{{ item.item }}"}
+    - name: Read HDFS report with its original configuration
+      ansible.builtin.command:
+        argv: ["{{ hadoop_home }}/bin/hdfs", --config, "{{ hadoop_conf_dir }}", dfsadmin, -report]
+      environment: "{{ hadoop_environment }}"
+      register: otchet_hdfs
+      changed_when: false
+      check_mode: false
+      when: inventory_hostname in groups['namenode'] and rezhim != 'stop'
+    - name: Require three live DataNodes and no dead nodes
+      ansible.builtin.assert:
+        that:
+          - "'Live datanodes (3):' in otchet_hdfs.stdout"
+          - "not (otchet_hdfs.stdout is search('Dead datanodes [(][1-9]'))"
+      when: inventory_hostname in groups['namenode'] and rezhim != 'stop'
+    - name: Prepare configuration and owned directories
+      ansible.builtin.include_tasks: tasks/prepare.yml
+      when: rezhim in ['configure', 'deploy']
+    - name: Manage only YARN and JobHistory daemons
+      ansible.builtin.include_tasks: tasks/services.yml
+      loop: "{{ spisok_demonov | reverse | list if rezhim == 'stop' else spisok_demonov }}"
+      loop_control: {loop_var: daemon, label: "{{ daemon.name }}"}
+      when: rezhim in ['start', 'stop', 'deploy'] and inventory_hostname in groups[daemon.group]
+    - name: Proverka YARN and HDFS readiness
+      ansible.builtin.include_tasks: tasks/proverka.yml
+      when: rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode

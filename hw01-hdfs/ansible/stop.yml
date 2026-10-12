@@ -1,0 +1,42 @@
+---
+- name: Остановить SecondaryNameNode
+  hosts: secondarynamenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: secondarynamenode
+        hdfs_daemon_action: stop
+
+- name: Остановить DataNode
+  hosts: datanodes
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: datanode
+        hdfs_daemon_action: stop
+
+- name: Остановить NameNode
+  hosts: namenode
+  become: yes
+  become_user: "{{ hdfs_user }}"
+  any_errors_fatal: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  environment: "{{ hadoop_environment }}"
+  tasks:
+    - ansible.builtin.include_tasks: tasks/daemon.yml
+      vars:
+        hdfs_daemon: namenode
+        hdfs_daemon_action: stop

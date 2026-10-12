@@ -1,0 +1,52 @@
+---
+- name: Check exact NodeManager membership in ResourceManager
+  ansible.builtin.uri:
+    url: "http://{{ groups['namenode'][0] }}:{{ resourcemanager_webapp_port }}/ws/v1/cluster/nodes"
+    use_proxy: false
+    return_content: true
+  register: nodes
+  until: >-
+    nodes.status | default(0) == 200
+    and (nodes.json.nodes | default({}, true)).get('node', []) | length == 3
+    and (nodes.json.nodes | default({}, true)).get('node', []) | map(attribute='state') | unique | list == ['RUNNING']
+    and (nodes.json.nodes | default({}, true)).get('node', []) | map(attribute='nodeHTTPAddress') | sort == groups['datanodes'] | map('regex_replace', '$', ':' ~ nodemanager_webapp_port) | sort
+  retries: 30
+  delay: 3
+  when: inventory_hostname in groups['namenode'] and rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode
+- name: Check each NodeManager health
+  ansible.builtin.uri:
+    url: "http://{{ inventory_hostname }}:{{ nodemanager_webapp_port }}/ws/v1/node/info"
+    use_proxy: false
+    return_content: true
+  register: zdorovie_uzla
+  until: zdorovie_uzla.status | default(0) == 200 and zdorovie_uzla.json.nodeInfo.nodeHealthy | default(false)
+  retries: 20
+  delay: 3
+  when: inventory_hostname in groups['datanodes'] and rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode
+- name: Check JobHistory Server readiness
+  ansible.builtin.uri:
+    url: "http://{{ groups['namenode'][0] }}:{{ jobhistory_webapp_port }}/ws/v1/history/info"
+    use_proxy: false
+    return_content: true
+  register: history
+  until: history.status | default(0) == 200 and history.json.historyInfo.startedOn | default(0) | int > 0
+  retries: 20
+  delay: 3
+  when: inventory_hostname in groups['namenode'] and rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode
+- name: Verify YARN RPC and HDFS after deployment
+  ansible.builtin.command:
+    argv: "{{ item }}"
+  loop:
+    - ["{{ hadoop_home }}/bin/yarn", node, -list, -all]
+    - ["{{ hadoop_home }}/bin/hdfs", --config, "{{ hadoop_conf_dir }}", dfsadmin, -report]
+  register: final_reports
+  changed_when: false
+  when: inventory_hostname in groups['namenode'] and rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode
+- name: Validate final RPC reports
+  ansible.builtin.assert:
+    that:
+      - final_reports.results[0].stdout is search('Total Nodes:[ ]*3')
+      - final_reports.results[0].stdout | regex_findall('(?m)^\s*[^\s:]+:\d+\s+RUNNING\s+') | length == 3
+      - "'Live datanodes (3):' in final_reports.results[1].stdout"
+      - "not (final_reports.results[1].stdout is search('Dead datanodes [(][1-9]'))"
+  when: inventory_hostname in groups['namenode'] and rezhim in ['start', 'check', 'deploy'] and not ansible_check_mode
