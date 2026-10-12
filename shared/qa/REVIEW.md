@@ -96,3 +96,16 @@ untracked-файлы. Commit, push, merge/rebase и создание PR не в�
 с безопасной очисткой, SSH-туннели с нестандартными ключами и инструкции на русском.
 Учтено разрешение преподавателя на localhost-доступ. Конфигурация и управление
 демонами не изменяются. Локальные результаты приведены выше; кластер NOT TESTED.
+
+## Интеграционные проверки — 12.10.2026
+
+- HDFS QA: PASS, 15/15 проверок, exit 0.
+- HDFS: 3 Live DataNode, fsck HEALTHY, Safe Mode OFF.
+- HDFS smoke-test: запись, чтение и очистка — PASS.
+- YARN QA: PASS, 15/15 проверок, exit 0.
+- YARN: 3 RUNNING NodeManager, ResourceManager и JobHistoryServer.
+- HDFS Web UI через localhost: 5/5 — PASS.
+- YARN Web UI через localhost: 5/5 — PASS.
+- Журналы HDFS: выборочно проверены. Найдены исторические SIGTERM от 10.10; во время проверок критических сбоев не наблюдалось.
+
+Все перечисленные интеграционные проверки выполнены на реальном кластере. Предыдущие отметки NOT TESTED для них больше не актуальны.
