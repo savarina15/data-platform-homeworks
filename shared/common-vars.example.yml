@@ -44,3 +44,7 @@ nodemanager_webapp_port: 8042
 
 # === YARN: JobHistory ===
 jobhistory_webapp_port: 19888
+
+# === Spark ===
+spark_version: "3.5.1"
+spark_home: "/home/team/spark-{{ spark_version }}-bin-hadoop3"

@@ -1,0 +1,35 @@
+---
+- name: Установка Apache Spark
+  hosts: all
+  become: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  tasks:
+    - name: Скопировать архив Spark на все машины
+      copy:
+        src: /tmp/spark-{{ spark_version }}-bin-hadoop3.tgz
+        dest: /tmp/spark-{{ spark_version }}-bin-hadoop3.tgz
+
+    - name: Распаковать Spark
+      unarchive:
+        src: "/tmp/spark-{{ spark_version }}-bin-hadoop3.tgz"
+        dest: "/home/team/"
+        remote_src: yes
+        creates: "{{ spark_home }}/bin/spark-submit"
+
+    - name: Настроить spark-env.sh
+      copy:
+        dest: "{{ spark_home }}/conf/spark-env.sh"
+        content: |
+          export HADOOP_CONF_DIR=/home/team/hadoop-3.4.0/etc/hadoop
+          export YARN_CONF_DIR=/home/team/hadoop-3.4.0/etc/hadoop
+          export SPARK_HOME={{ spark_home }}
+          export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+          export HIVE_CONF_DIR=/home/team/apache-hive-4.0.0-alpha-2-bin/conf
+
+    - name: Прописать SPARK_HOME в PATH
+      copy:
+        dest: /etc/profile.d/spark.sh
+        content: |
+          export SPARK_HOME={{ spark_home }}
+          export PATH=$PATH:$SPARK_HOME/bin
