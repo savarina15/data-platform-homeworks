@@ -1,0 +1,22 @@
+{
+  "jdbc_url": "jdbc:hive2://127.0.0.1:10000/default",
+  "user": "team",
+  "database": "default",
+  "table": "books_stats_2023_qa_team37",
+  "location": "hdfs://team-37-nn:9000/user/hive/warehouse/books_stats_2023",
+  "columns": [
+    {
+      "name": "count",
+      "type": "BIGINT"
+    }
+  ],
+  "partition_column": {
+    "name": "genre",
+    "type": "STRING"
+  },
+  "expect_partitions": [
+    "genre=Dystopia",
+    "genre=Fiction"
+  ],
+  "min_rows": 2
+}
