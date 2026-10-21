@@ -1,0 +1,26 @@
+{
+  "jdbc_url": "jdbc:hive2://127.0.0.1:11000/default",
+  "user": "team",
+  "database": "default",
+  "table": "books_summary_spark",
+  "location": "/user/team/spark/books_summary",
+  "columns": [
+    {
+      "name": "genre",
+      "type": "STRING"
+    },
+    {
+      "name": "books_count",
+      "type": "BIGINT"
+    }
+  ],
+  "partition_column": {
+    "name": "year",
+    "type": "INT"
+  },
+  "expect_partitions": [
+    "year=2022",
+    "year=2023"
+  ],
+  "min_rows": 1
+}
