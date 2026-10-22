@@ -1,0 +1,88 @@
+---
+- name: Развертывание Apache Hive (Non-Embedded)
+  hosts: all
+  become: yes
+  vars_files:
+    - ../../shared/common-vars.example.yml
+  tasks:
+    - name: Установить MySQL
+      apt:
+        name: mysql-server
+        state: present
+        update_cache: yes
+
+    - name: Запустить MySQL
+      systemd:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Создать базу metastore и пользователя hive
+      shell: |
+        mysql -e "CREATE DATABASE IF NOT EXISTS metastore;"
+        mysql -e "CREATE USER IF NOT EXISTS 'hive'@'%' IDENTIFIED BY '{{ mysql_hive_password }}';"
+        mysql -e "GRANT ALL PRIVILEGES ON metastore.* TO 'hive'@'%';"
+        mysql -e "FLUSH PRIVILEGES;"
+
+    - name: Создать папку warehouse в HDFS
+      shell: "hdfs dfs -mkdir -p /user/hive/warehouse && hdfs dfs -chmod 777 /user/hive/warehouse"
+      ignore_errors: yes
+
+    - name: Скачать Hive
+      get_url:
+        url: "https://archive.apache.org/dist/hive/hive-{{ hive_version }}/apache-hive-{{ hive_version }}-bin.tar.gz"
+        dest: "/tmp/apache-hive-{{ hive_version }}-bin.tar.gz"
+
+    - name: Распаковать Hive
+      unarchive:
+        src: "/tmp/apache-hive-{{ hive_version }}-bin.tar.gz"
+        dest: "/home/team/"
+        remote_src: yes
+        creates: "{{ hive_home }}/bin/hive"
+
+    - name: Скачать JDBC драйвер MySQL
+      get_url:
+        url: "https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar"
+        dest: "{{ hive_home }}/lib/mysql-connector-j-8.4.0.jar"
+
+    - name: Создать hive-site.xml
+      copy:
+        dest: "{{ hive_conf_dir }}/hive-site.xml"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <configuration>
+              <property><name>javax.jdo.option.ConnectionURL</name><value>jdbc:mysql://localhost:3306/metastore?createDatabaseIfNotExist=true&amp;useSSL=false&amp;allowPublicKeyRetrieval=true</value></property>
+              <property><name>javax.jdo.option.ConnectionDriverName</name><value>com.mysql.cj.jdbc.Driver</value></property>
+              <property><name>javax.jdo.option.ConnectionUserName</name><value>hive</value></property>
+              <property><name>javax.jdo.option.ConnectionPassword</name><value>{{ mysql_hive_password }}</value></property>
+              <property><name>hive.metastore.uris</name><value>thrift://{{ metastore_host }}:9083</value></property>
+              <property><name>hive.metastore.warehouse.dir</name><value>/user/hive/warehouse</value></property>
+              <property><name>hive.metastore.schema.verification</name><value>false</value></property>
+              <property><name>hive.server2.thrift.bind.host</name><value>0.0.0.0</value></property>
+              <property><name>hive.server2.thrift.port</name><value>10000</value></property>
+              <property><name>hive.metastore.event.db.notification.api.auth</name><value>false</value></property>
+              <property><name>hive.server2.enable.doAs</name><value>false</value></property>
+          </configuration>
+
+    - name: Создать hive-env.sh
+      copy:
+        dest: "{{ hive_conf_dir }}/hive-env.sh"
+        content: |
+          export HADOOP_HOME=/home/team/hadoop-3.4.0
+          export HADOOP_CONF_DIR=/home/team/hadoop-3.4.0/etc/hadoop
+          export YARN_CONF_DIR=/home/team/hadoop-3.4.0/etc/hadoop
+          export HIVE_CONF_DIR={{ hive_conf_dir }}
+          export HADOOP_CLASSPATH=$(hadoop classpath)
+
+    - name: Инициализировать схему Metastore
+      command: "{{ hive_home }}/bin/schematool -dbType mysql -initSchema"
+      args:
+        creates: "{{ hive_conf_dir }}/.schema_initialized"
+
+    - name: Запустить Metastore и HiveServer2
+      shell: |
+        pkill -9 -f metastore || true
+        pkill -9 -f hiveserver2 || true
+        nohup {{ hive_home }}/bin/hive --service metastore > /tmp/metastore.log 2>&1 &
+        sleep 5
+        nohup {{ hive_home }}/bin/hive --service hiveserver2 > /tmp/hiveserver2.log 2>&1 &
