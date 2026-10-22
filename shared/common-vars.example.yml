@@ -45,6 +45,13 @@ nodemanager_webapp_port: 8042
 # === YARN: JobHistory ===
 jobhistory_webapp_port: 19888
 
+# === Hive ===
+hive_version: "4.0.0-alpha-2"
+hive_home: "/home/team/apache-hive-{{ hive_version }}-bin"
+hive_conf_dir: "{{ hive_home }}/conf"
+metastore_host: "team-37-en"
+mysql_hive_password: "CHANGE_ME"
+
 # === Spark ===
 spark_version: "3.5.1"
 spark_home: "/home/team/spark-{{ spark_version }}-bin-hadoop3"
