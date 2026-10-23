@@ -1,22 +1,41 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+import argparse
 
-# Создаем Spark-сессию с поддержкой Hive
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, trim
+
+parser = argparse.ArgumentParser(description="Подсчёт книг по жанрам из CSV в HDFS")
+parser.add_argument("--input", default="hdfs://team-37-nn:9000/user/team/datasets/books")
+parser.add_argument("--output", default="hdfs://team-37-nn:9000/user/hive/warehouse/books_stats_2023")
+parser.add_argument("--year", type=int, default=2023)
+args = parser.parse_args()
+
+# Создаем Spark-сессию; мастер задаётся при запуске через spark-submit
 spark = SparkSession.builder \
     .appName("HW4_Spark_Transformation") \
-    .enableHiveSupport() \
     .getOrCreate()
 
-# Читаем данные из таблицы books, загруженной в HW3
-df = spark.read.table("books")
+try:
+    # Читаем исходные CSV из HDFS, сохранённые в HW3; год — из каталогов year=...
+    df = spark.read.option("header", "false") \
+        .option("mode", "FAILFAST") \
+        .option("basePath", args.input) \
+        .schema("id STRING, title STRING, author STRING, genre STRING") \
+        .csv(args.input)
 
-# Применяем трансформацию: фильтруем книги 2023 года и считаем количество по жанрам
-transformed_df = df.filter(col("year") == 2023) \
-    .groupBy("genre") \
-    .count()
+    # Приводим типы и убираем пробелы по краям жанра
+    df = df.withColumn("id", col("id").cast("int")) \
+        .withColumn("year", col("year").cast("int")) \
+        .withColumn("genre", trim(col("genre")))
 
-# Сохраняем как таблицу в Hive с партиционированием по жанру
-transformed_df.write \
-    .mode("overwrite") \
-    .partitionBy("genre") \
-    .saveAsTable("books_stats_2023")
+    # Фильтруем книги выбранного года и считаем количество по жанрам
+    transformed_df = df.filter(
+        (col("year") == args.year) & (col("id") > 0) & (col("genre") != "")
+    ).groupBy("genre").count()
+
+    # Сохраняем Parquet с партиционированием по жанру; таблицу Hive регистрирует QA
+    transformed_df.write \
+        .mode("overwrite") \
+        .partitionBy("genre") \
+        .parquet(args.output)
+finally:
+    spark.stop()

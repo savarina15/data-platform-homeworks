@@ -13,4 +13,12 @@
 ```bash
 cd ~/data-platform-homeworks
 ansible-playbook -i shared/inventory.ini hw03-hive/ansible/install-hive.yml
+```
 
+## Загрузка данных
+
+[`scripts/load_data.sh`](scripts/load_data.sh) создаёт тестовые CSV через `echo`,
+загружает их в HDFS и выполняет встроенный SQL через Beeline. Создаётся таблица
+`default.books` с партициями по году; повторный запуск заменяет учебные партиции.
+В конце скрипт выводит партиции, число строк по годам и все три книги.
+Исходные CSV сохраняются в HDFS для HW4.
