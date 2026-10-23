@@ -13,3 +13,10 @@
 ```bash
 cd ~/data-platform-homeworks
 ansible-playbook -i shared/inventory.ini hw04-spark/ansible/install-spark.yml
+```
+
+## Обработка данных
+
+[`scripts/spark_task.py`](scripts/spark_task.py) читает исходные CSV HW3 из HDFS,
+приводит типы, фильтрует данные и считает книги по жанрам. Результат записывается
+в Parquet с партициями по `genre`; регистрацию таблицы выполняет инструмент QA.
