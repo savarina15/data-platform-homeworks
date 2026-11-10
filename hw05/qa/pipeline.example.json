@@ -1,0 +1,18 @@
+{
+  "prefect": {"api_url": "http://127.0.0.1:4200/api", "flow_id": null},
+  "yarn": {"url": "http://team-37-nn:8088", "user": "team"},
+  "input": "hdfs://team-37-nn:9000/user/team/datasets/books",
+  "hive": {
+    "jdbc_url": "jdbc:hive2://team-37-en:10000/default",
+    "user": "team",
+    "database": "default",
+    "table": "books_stats_2023_qa_team37",
+    "location": "hdfs://team-37-nn:9000/user/hive/warehouse/books_stats_2023",
+    "columns": [{"name": "count", "type": "BIGINT"}],
+    "partition_column": {"name": "genre", "type": "STRING"},
+    "expect_partitions": ["genre=Dystopia", "genre=Fiction"],
+    "min_rows": 2,
+    "expected_rows": [["1", "Dystopia"], ["1", "Fiction"]]
+  },
+  "clock_skew_seconds": 5
+}
