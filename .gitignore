@@ -13,4 +13,9 @@ team_internal
 __pycache__/
 *.pyc
 *.idea
-*.docxshared/common-vars.yml
+*.docx
+shared/common-vars.yml
+
+# Archives and binaries
+*.tar.gz
+*.jar
