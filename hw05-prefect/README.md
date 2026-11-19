@@ -1,32 +1,33 @@
-# HW5: Prefect Pipeline
+# ДЗ 5
 
-## Описание
-Реализован процесс оркестрации данных с помощью Prefect. Flow запускает PySpark-приложение (из HW4), которое работает под управлением YARN, читает данные из HDFS, выполняет трансформации и сохраняет результат.
+Prefect запускает `run_on_yarn.sh`. Spark работает через YARN, читает CSV из HDFS (`/user/team/datasets/books`), приводит типы и считает книги за 2023 год по жанрам. Результат пишется в Parquet (`/user/team/hw5/books_stats`) и доступен в Hive как `default.hw5_books_stats`.
 
-## Установка Prefect
-Для изоляции зависимостей Prefect установлен в виртуальное окружение:
+Команды выполняются на `team-37-en` из корня репозитория. Если Prefect ещё не установлен, сначала настрой окружение.
+
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install prefect
+python3 -m venv ~/prefect-hw5/venv
+~/prefect-hw5/venv/bin/python -m pip install 'prefect>=3,<4'
 ```
 
-## Запуск сервера Prefect
-Сервер запущен в фоновом режиме и доступен на порту 4200:
+Если сервер Prefect выключен, запусти его в отдельной SSH-сессии.
+
 ```bash
-nohup prefect server start --host 0.0.0.0 > prefect.log 2>&1 &
+~/prefect-hw5/venv/bin/prefect server start --host 127.0.0.1 --port 4200
 ```
 
-## Запуск Flow
-Для запуска пайплайна выполните:
+Запусти Flow и проверь таблицу.
+
 ```bash
-source venv/bin/activate
-python flow.py
+export PREFECT_API_URL=http://127.0.0.1:4200/api
+curl -fsS --max-time 5 "$PREFECT_API_URL/health" &&
+  ~/prefect-hw5/venv/bin/python hw05-prefect/flow.py
+
+~/hive/bin/beeline -u 'jdbc:hive2://team-37-en:10000/default' -n team \
+  -e 'SELECT genre, `count` FROM default.hw5_books_stats ORDER BY genre'
 ```
 
-## Проверка
-Список запусков Flow и их статусы:
-```bash
-prefect flow-run ls
-```
-*Ожидаемый результат: последний запуск должен быть со статусом `Completed`.*
+19.11.2026 Prefect показал `Completed`, а YARN — `FINISHED / SUCCEEDED`.
+Hive вернул `Dystopia — 1` и `Fiction — 1`.
+
+- Prefect `flow_run_id` — `c6e03656-688c-4958-9211-f89ba7af5fb4`
+- YARN `application_id` — `application_1792582217685_0010`
