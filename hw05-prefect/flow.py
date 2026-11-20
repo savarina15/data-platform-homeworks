@@ -1,47 +1,22 @@
-import os
+from prefect import flow, task
 import subprocess
-from pathlib import Path
-
-from prefect import flow, get_run_logger, task
-from prefect.runtime import flow_run
-
-
-def execute_launcher(flow_run_id: str) -> subprocess.CompletedProcess[str]:
-    put_k_skriptu = Path(__file__).resolve().with_name("run_on_yarn.sh")
-    child_env = os.environ.copy()
-    child_env["HW5_FLOW_RUN_ID"] = flow_run_id
-
-    try:
-        return subprocess.run(
-            ["bash", str(put_k_skriptu)],
-            env=child_env,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as failure:
-        raise RuntimeError(
-            f"Запуск Spark завершился с кодом {failure.returncode}\n"
-            f"{failure.stderr.strip()}"
-        ) from failure
-
 
 @task(name="Run Spark Job on YARN")
-def run_spark_job(flow_run_id: str) -> str:
-    journal = get_run_logger()
-    journal.info("Запускаем Spark на YARN для flow_run_id=%s", flow_run_id)
-
-    execution = execute_launcher(flow_run_id)
-    yarn_reference = execution.stdout.strip()
-    journal.info("%s", execution.stderr.strip())
-    journal.info("flow_run_id=%s application_id=%s", flow_run_id, yarn_reference)
-    return yarn_reference
-
+def run_spark_job():
+    script_path = "/home/team/data-platform-homeworks/hw05-prefect/run_on_yarn.sh"
+    
+    print(f"Запускаем {script_path}...")
+    result = subprocess.run(["bash", script_path], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        raise Exception(f"Spark job failed!\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+    
+    print("Spark job finished successfully!")
+    return "SUCCESS"
 
 @flow(name="hw5-spark-pipeline")
-def main_flow() -> str:
-    return run_spark_job(flow_run.id)
-
+def main_flow():
+    run_spark_job()
 
 if __name__ == "__main__":
     main_flow()
