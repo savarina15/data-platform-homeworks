@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "exit_code": 0,
+  "checked_at": "2026-11-20T15:02:22.116646+00:00",
+  "flow_run_id": "dcf6d9c3-069c-49b6-8c65-1143052bb51d",
+  "application_id": "application_1792582217685_0012",
+  "checks": [
+    {
+      "check": "Prefect API",
+      "status": "PASS",
+      "detail": "healthy"
+    },
+    {
+      "check": "HDFS input",
+      "status": "PASS",
+      "detail": "hdfs://team-37-nn:9000/user/team/datasets/books: files=2, bytes=112"
+    },
+    {
+      "check": "Prefect Flow run",
+      "status": "PASS",
+      "detail": "{'id': 'dcf6d9c3-069c-49b6-8c65-1143052bb51d', 'start': 1795154281805, 'end': 1795154362096}"
+    },
+    {
+      "check": "YARN API",
+      "status": "PASS",
+      "detail": "ResourceManager STARTED"
+    },
+    {
+      "check": "Spark in YARN / correlation",
+      "status": "PASS",
+      "detail": "{'id': 'application_1792582217685_0012', 'start': 1795154315480, 'end': 1795154360960, 'correlation': {'method': 'unique Spark task window + launcher submit log', 'task_run_id': '01a1f788-8588-787f-878b-0da9136fc72f', 'submit_log': '/tmp/hw5-books-6b85f606-5368-47a5-b801-9c22d1917262.SNbSsM.log', 'sha256': 'ff535f7022827e30abfff05db545683d580e2c753380124ac83364f321158500'}}"
+    },
+    {
+      "check": "Hive table / schema / rows / partitions / read",
+      "status": "PASS",
+      "detail": "{'table': '`default`.`hw5_books_stats`', 'rows': 2, 'location': 'hdfs://team-37-nn:9000/user/team/hw5/books_stats'}"
+    },
+    {
+      "check": "Result freshness",
+      "status": "PASS",
+      "detail": "все part-* ожидаемых партиций записаны во время связанного Spark-приложения"
+    }
+  ]
+}

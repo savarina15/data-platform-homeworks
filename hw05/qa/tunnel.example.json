@@ -1,0 +1,7 @@
+{
+  "services": {
+    "prefect": {"url": "http://127.0.0.1:4200", "local_port": 14200},
+    "resourcemanager": {"url": "http://team-37-nn:8088", "local_port": 18088},
+    "hive": {"url": "http://team-37-en:10000", "local_port": 11000}
+  }
+}
