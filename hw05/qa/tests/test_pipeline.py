@@ -64,7 +64,7 @@ class PipelineTests(unittest.TestCase):
         if sql.startswith("DESCRIBE FORMATTED"):
             return ("Location:\t" + self.config["hive"]["location"] + "\t\n").encode()
         if sql.startswith("DESCRIBE"):
-            return b"count\tbigint\t\ngenre\tstring\t\n\n# Partition Information\n# col_name\tdata_type\tcomment\ngenre\tstring\t\n"
+            return b"count\tbigint\t\ngenre\tstring\t\n\tNULL\tNULL\n# Partition Information\n# col_name\tdata_type\tcomment\ngenre\tstring\t\n"
         if sql.startswith("SHOW PARTITIONS"):
             return b"genre=Dystopia\ngenre=Fiction\n"
         if sql.startswith("SELECT COUNT(*)"):
@@ -137,6 +137,60 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(self.execute(obj)[0], 2)
         self.config["prefect"]["flow_id"] = None
         self.assertEqual(self.execute()[0], 2)
+
+    def fallback_checker(self):
+        obj = self.checker()
+        obj.args.task_run_id = "00000000-0000-4000-8000-000000000003"
+        app = self.responses["/ws/v1/cluster/apps/" + APP]["app"]
+        app["name"] = "hw5-books-" + FLOW
+        app["applicationTags"] = "hw5-submit-id=" + FLOW
+        path = self.directory / (app["name"] + ".test.log")
+        path.write_text(f"hw05-prefect/scripts/spark_task.py\n{APP} (state: FINISHED)\n final status: SUCCEEDED\n")
+        os.utime(path, ((START + 30000) / 1000,) * 2)
+        obj.args.spark_submit_log = str(path)
+        self.task = {"id": obj.args.task_run_id, "flow_run_id": RUN,
+                     "task_key": "run_spark_job-abc", "state_type": "COMPLETED", "state": {"type": "COMPLETED"},
+                     "run_count": 1, "start_time": "2026-11-10T00:00:01Z", "end_time": "2026-11-10T00:00:55Z"}
+        self.responses["/api/task_runs/" + obj.args.task_run_id] = self.task
+        self.listing = {"apps": {"app": [app]}}
+        self.responses[f"/ws/v1/cluster/apps?applicationTypes=SPARK&user=team&startedTimeBegin={START - 4000}&startedTimeEnd={START + 60000}"] = self.listing
+        return obj
+
+    def test_submit_log_correlation_positive(self):
+        obj = self.fallback_checker()
+        code, obj = self.execute(obj)
+        self.assertEqual(code, 0)
+        self.assertIn("unique Spark task window", obj.results[4]["detail"])
+        self.assertIn("sha256", obj.results[4]["detail"])
+
+    def test_submit_log_correlation_rejects_ambiguity_and_wrong_task(self):
+        for scenario in ["other-task", "failed-task", "retries", "two-apps", "no-apps", "wrong-flow-tag", "wrong-submit-tag"]:
+            with self.subTest(scenario=scenario):
+                obj = self.fallback_checker()
+                app = self.responses["/ws/v1/cluster/apps/" + APP]["app"]
+                if scenario == "other-task": self.task["flow_run_id"] = FLOW
+                elif scenario == "failed-task": self.task["state_type"] = "FAILED"
+                elif scenario == "retries": self.task["run_count"] = 2
+                elif scenario == "two-apps": self.listing["apps"]["app"].append(copy.deepcopy(app))
+                elif scenario == "no-apps": self.listing["apps"]["app"] = []
+                elif scenario == "wrong-flow-tag": app["applicationTags"] += ",prefect-flow-run-id=" + FLOW
+                elif scenario == "wrong-submit-tag": app["applicationTags"] = "hw5-submit-id=" + RUN
+                self.assertEqual(self.execute(obj)[0], 1)
+
+    def test_submit_log_correlation_rejects_bad_or_stale_log(self):
+        for scenario in ["missing", "wrong-id", "failed", "old", "no-source"]:
+            with self.subTest(scenario=scenario):
+                obj = self.fallback_checker()
+                path = Path(obj.args.spark_submit_log)
+                if scenario == "missing": obj.args.spark_submit_log += ".absent"
+                elif scenario == "old": os.utime(path, ((START - 100000) / 1000,) * 2)
+                else:
+                    text = path.read_text()
+                    if scenario == "wrong-id": text = text.replace(APP, "application_1_2")
+                    elif scenario == "failed": text = text.replace("SUCCEEDED", "FAILED")
+                    else: text = text.replace("hw05-prefect/scripts/spark_task.py", "other.py")
+                    path.write_text(text)
+                self.assertEqual(self.execute(obj)[0], 1)
 
     def test_service_failure_does_not_hide_other_checks(self):
         obj = self.checker()
@@ -291,6 +345,8 @@ class PipelineTests(unittest.TestCase):
         base = f"http://127.0.0.1:{server.server_port}"
         obj = qa.Checks(self.args(), self.config)
         self.assertIs(obj.json(base + "/api/health"), True)
+        responses["/query?filter=1"] = {"query_preserved": True}
+        self.assertEqual(obj.json(base + "/query?filter=1"), {"query_preserved": True})
         for path in ["/redirect", "/unavailable", "/html"]:
             with self.subTest(path=path), self.assertRaises((qa.Failed, ValueError)):
                 obj.json(base + path)

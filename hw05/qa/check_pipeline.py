@@ -2,6 +2,7 @@
 """Read-only HW5 checks. No orchestration, spark-submit, DDL or data writes."""
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -126,7 +127,8 @@ class Checks(transport.QA):
         # Reuse bounded curl transport: no redirects, proxies, .curlrc or disabled TLS.
         parsed = urlsplit(url)
         self.config = {"services": {"request": {"url": f"{parsed.scheme}://{parsed.netloc}"}}}
-        return json.loads(self.http("request", parsed.path))
+        path = parsed.path + ("?" + parsed.query if parsed.query else "")
+        return json.loads(self.http("request", path))
 
     def hdfs_command(self, *args):
         return self.command([self.args.hdfs_bin, "dfs", *args]).decode(errors="replace")
@@ -164,13 +166,53 @@ class Checks(transport.QA):
                 f"YARN не FINISHED/SUCCEEDED: state={app['state']}, finalStatus={app['finalStatus']}")
         require(app["user"] == self.data["yarn"]["user"], "не тот пользователь YARN")
         tags = {tag.strip() for tag in app["applicationTags"].split(",")}
-        require("prefect-flow-run-id=" + flow["id"] in tags, "нет YARN tag, связывающего приложение с Flow")
+        correlation = "YARN flow-run tag"
+        if "prefect-flow-run-id=" + flow["id"] not in tags:
+            require(not any(tag.startswith("prefect-flow-run-id=") for tag in tags), "YARN tag указывает на другой Flow")
+            correlation = self.submit_evidence(flow, app)
         start, end = app["startedTime"], app["finishedTime"]
         skew = self.data["clock_skew_seconds"] * 1000
         require(type(start) is int and type(end) is int and 0 < start < end
                 and flow["start"] - skew <= start < end <= flow["end"] + skew,
                 "Spark не выполнялся внутри интервала Flow")
-        return {"id": app["id"], "start": start, "end": end}
+        return {"id": app["id"], "start": start, "end": end, "correlation": correlation}
+
+    def submit_evidence(self, flow, app):
+        """Explicit fallback for the team's launcher, using existing execution evidence."""
+        task_id = getattr(self.args, "task_run_id", None)
+        log_path = getattr(self.args, "spark_submit_log", None)
+        require(task_id and log_path, "нет Flow tag: нужны --task-run-id и --spark-submit-log для проверки существующих свидетельств")
+        task = self.json(self.data["prefect"]["api_url"] + "/task_runs/" + task_id)
+        require(task["id"] == task_id and task["flow_run_id"] == flow["id"]
+                and task["task_key"].startswith("run_spark_job-")
+                and task["state_type"] == task["state"]["type"] == "COMPLETED"
+                and task["run_count"] == 1, "Spark task не соответствует завершённому запуску Flow")
+        start, end = timestamp(task["start_time"]), timestamp(task["end_time"])
+        skew = self.data["clock_skew_seconds"] * 1000
+        require(flow["start"] - skew <= start < end <= flow["end"] + skew
+                and start - skew <= app["startedTime"] < app["finishedTime"] <= end + skew,
+                "Spark не находится внутри интервала Spark task")
+        listing = self.json(self.data["yarn"]["url"].rstrip("/") +
+            f"/ws/v1/cluster/apps?applicationTypes=SPARK&user={self.data['yarn']['user']}"
+            f"&startedTimeBegin={start - skew}&startedTimeEnd={end + skew}")
+        candidates = (listing.get("apps") or {}).get("app", [])
+        require(len(candidates) == 1 and candidates[0]["id"] == app["id"],
+                "неоднозначная связь: в интервале task должно быть ровно одно Spark-приложение пользователя")
+        name = app["name"]
+        require(re.fullmatch(r"hw5-books-[0-9a-f-]{36}", name), "неизвестное имя HW5 launcher")
+        submit_id = uuid(name[len("hw5-books-"):])
+        require("hw5-submit-id=" + submit_id in app["applicationTags"].split(","), "submit tag не соответствует имени приложения")
+        path = Path(log_path)
+        require(path.name.startswith(name + ".") and path.name.endswith(".log"), "имя submit-лога не соответствует приложению")
+        raw = path.read_bytes()
+        text = raw.decode(errors="replace")
+        require(set(re.findall(r"application_\d+_\d+", text)) == {app["id"]}
+                and "hw05-prefect/scripts/spark_task.py" in text
+                and "(state: FINISHED)" in text
+                and re.search(r"final status:\s*SUCCEEDED", text), "submit-лог не подтверждает нужное успешное HW5 приложение")
+        require(start - skew <= path.stat().st_mtime * 1000 <= end + skew, "submit-лог вне интервала task")
+        return {"method": "unique Spark task window + launcher submit log", "task_run_id": task_id,
+                "submit_log": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
 
     def sql(self, sql):
         table = self.data["hive"]
@@ -193,6 +235,8 @@ class Checks(transport.QA):
             cells = [cell.strip() for cell in line.split("\t")]
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
+            if not cells[0] and all(cell in ("", "NULL") for cell in cells[1:]):
+                continue  # Hive 4 DESCRIBE emits an empty separator as TAB NULL TAB NULL.
             require(len(cells) >= 2, "неизвестный формат DESCRIBE tsv2")
             actual.append((cells[0].lower(), cells[1].upper()))
         require(actual == [(n.lower(), t) for n, t in columns], f"схема отличается: {actual}")
@@ -273,6 +317,8 @@ def main(argv=None):
     parser.add_argument("--config", required=True)
     parser.add_argument("--flow-run-id")
     parser.add_argument("--application-id")
+    parser.add_argument("--task-run-id", help="Spark task UUID для корреляции по существующему submit-логу")
+    parser.add_argument("--spark-submit-log", help="существующий лог launcher на машине запуска QA; используется вместе с --task-run-id")
     parser.add_argument("--hdfs-bin", default="hdfs")
     parser.add_argument("--beeline-bin", default="beeline")
     parser.add_argument("--timeout", type=transport.positive, default=60, help="таймаут каждой HTTP/CLI операции, секунд")
@@ -282,6 +328,9 @@ def main(argv=None):
         data = config(args.config)
         if args.flow_run_id:
             uuid(args.flow_run_id)
+        if args.task_run_id:
+            uuid(args.task_run_id)
+        require(bool(args.task_run_id) == bool(args.spark_submit_log), "--task-run-id и --spark-submit-log задаются вместе")
         if args.application_id:
             require(re.fullmatch(r"application_[0-9]+_[0-9]+", args.application_id), "некорректный application ID")
         if args.report:

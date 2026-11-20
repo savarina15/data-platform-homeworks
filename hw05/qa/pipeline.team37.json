@@ -1,0 +1,44 @@
+{
+  "prefect": {
+    "api_url": "http://team-37-en:4200/api",
+    "flow_id": "f0abf114-b684-494b-8fd1-7b92ef218bb5"
+  },
+  "yarn": {
+    "url": "http://team-37-nn:8088",
+    "user": "team"
+  },
+  "input": "hdfs://team-37-nn:9000/user/team/datasets/books",
+  "hive": {
+    "jdbc_url": "jdbc:hive2://team-37-en:10000/default",
+    "user": "team",
+    "database": "default",
+    "table": "hw5_books_stats",
+    "location": "hdfs://team-37-nn:9000/user/team/hw5/books_stats",
+    "columns": [
+      {
+        "name": "count",
+        "type": "BIGINT"
+      }
+    ],
+    "partition_column": {
+      "name": "genre",
+      "type": "STRING"
+    },
+    "expect_partitions": [
+      "genre=Dystopia",
+      "genre=Fiction"
+    ],
+    "min_rows": 2,
+    "expected_rows": [
+      [
+        "1",
+        "Dystopia"
+      ],
+      [
+        "1",
+        "Fiction"
+      ]
+    ]
+  },
+  "clock_skew_seconds": 5
+}
